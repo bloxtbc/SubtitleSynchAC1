@@ -1,0 +1,12 @@
+{
+  "cmake.configureOnOpen": true,
+
+  "cmake.useCMakePresets": false,
+
+  "cmake.generator": "Ninja",
+
+  "cmake.configureSettings": {
+    "CMAKE_C_COMPILER": "C:/mingw32/bin/gcc.exe",
+    "CMAKE_CXX_COMPILER": "C:/mingw32/bin/g++.exe"
+  }
+}

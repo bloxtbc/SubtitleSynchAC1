@@ -1,0 +1,12 @@
+[submodule "external/patcher"]
+	path = external/patcher
+	url = https://github.com/withmorten/patcher.git
+[submodule "external/minhook"]
+	path = external/minhook
+	url = https://github.com/TsudaKageyu/minhook.git
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "external/xbyak"]
+	path = external/xbyak
+	url = https://github.com/herumi/xbyak.git

@@ -1,0 +1,88 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Configure: MinGW x86",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-S", "${workspaceFolder}",
+                "-B", "${workspaceFolder}/build-mingw32",
+                "-G", "MinGW Makefiles",
+                "-DCMAKE_BUILD_TYPE=Debug",
+                "-DCMAKE_C_FLAGS=-m32",
+                "-DCMAKE_CXX_FLAGS=-m32"
+            ],
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "Build: MinGW x86",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/build-mingw32",
+                "--parallel"
+            ],
+            "dependsOn": "Configure: MinGW x86",
+            "problemMatcher": ["$gcc"]
+        },
+
+        {
+            "label": "Configure: VS2022 x86",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-S", "${workspaceFolder}",
+                "-B", "${workspaceFolder}/build-vs2022-x86",
+                "-G", "Visual Studio 17 2022",
+                "-A", "Win32"
+            ],
+            "problemMatcher": ["$msCompile"]
+        },
+        {
+            "label": "Build: VS2022 x86",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/build-vs2022-x86",
+                "--config",
+                "Debug",
+                "--parallel"
+            ],
+            "dependsOn": "Configure: VS2022 x86",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$msCompile"]
+        },
+
+        {
+            "label": "Clean: VS2022 x86",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/build-vs2022-x86",
+                "--target",
+                "clean",
+                "--config",
+                "Debug"
+            ],
+            "problemMatcher": []
+        },
+
+        {
+            "label": "Delete Build Directories",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "if exist build-mingw32 rmdir /s /q build-mingw32 & if exist build-vs2022-x86 rmdir /s /q build-vs2022-x86"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}
