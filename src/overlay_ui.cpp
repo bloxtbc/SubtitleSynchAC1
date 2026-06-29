@@ -168,7 +168,6 @@ void SubtitleOverlay::drawDebugWindow() {
 
     ImGui::SliderFloat("Font Scale", &g_subtitleSettings.scale, 0.5f, 3.0f);
 
-    ImGuiIO& io = ImGui::GetIO();
     if (ImGui::Button("Reset to defaults"))
     {
         ImVec2 screenSize = io.DisplaySize;
