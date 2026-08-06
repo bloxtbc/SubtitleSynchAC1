@@ -2,20 +2,11 @@
 #include <audio_system.h>
 #include <xbyak/xbyak.h>
 #include <cstddef>
+#include <cstring>
 #include <memory>
 
 #include "patcher.h"
 #include "globals.h"
-
-bool gamePaused;
-
-void __stdcall PausedFalse() { 
-    gamePaused = false;
-}
-
-void __stdcall PausedTrue() { 
-    gamePaused = true;
-}
 
 void PushAudioEvent(uintptr_t evt) {
     g_AudioQueue.push(evt);
@@ -28,25 +19,22 @@ MidHook MakeMidHook(uintptr_t address, size_t overwriteSize, Func&& builder)
     hook.address = address;
     hook.size = overwriteSize;
     hook.returnAddress = address + overwriteSize;
+    hook.overwrittenBytes.resize(overwriteSize);
+    std::memcpy(hook.overwrittenBytes.data(), reinterpret_cast<const void*>(address), overwriteSize);
 
     if (overwriteSize < 5) // jmp + address needs 5 bytes
         return hook;
 
     auto code = std::make_unique<Xbyak::CodeGenerator>();
 
-    MidHook tempHook{};
-    tempHook.address = address;
-    tempHook.size = overwriteSize;
-    tempHook.returnAddress = address + overwriteSize;
+    builder(*code, hook);
 
-    builder(*code, tempHook);
-
-    uintptr_t target = (uintptr_t)code->getCode();
+    uintptr_t target = reinterpret_cast<uintptr_t>(code->getCode());
     uintptr_t rel = target - (address + 5);
 
     uint8_t jmp[5];
     jmp[0] = 0xE9;
-    *(uint32_t*)&jmp[1] = (uint32_t)rel;
+    *(uint32_t*)&jmp[1] = static_cast<uint32_t>(rel);
     // 0xE9 (jmp) to 0x00000000 (address 4bytes)
 
     PatchBytes(address, jmp, 5);
@@ -78,20 +66,9 @@ void applyASMPatches()
         {
             using namespace Xbyak;
 
-            c.db(0x60); // pushad
-            c.db(0x9C); // pushfd
-
-            c.mov(c.eax, (uintptr_t)&PausedTrue);
-            c.call(c.eax);
-
-            c.db(0x9D); // popfd
-            c.db(0x61); // popad
-
             c.mov(c.byte[c.edi + 8], 1);
             c.cmp(c.dword[c.esi + 108], 0);
-
-            c.mov(c.eax, hook.returnAddress);
-            c.jmp(c.eax);
+            c.jmp((const void*)hook.returnAddress);
         }
     });
 
@@ -104,20 +81,9 @@ void applyASMPatches()
         {
             using namespace Xbyak;
 
-            c.db(0x60); // pushad
-            c.db(0x9C); // pushfd
-
-            c.mov(c.eax, (uintptr_t)&PausedFalse);
-            c.call(c.eax);
-
-            c.db(0x9D); // popfd
-            c.db(0x61); // popad
-
             c.mov(c.byte[c.edi + 8], 0);
             c.cmp(c.dword[c.esi + 108], 0);
-
-            c.mov(c.eax, hook.returnAddress);
-            c.jmp(c.eax);
+            c.jmp((const void*)hook.returnAddress);
         }
     });
 
@@ -129,7 +95,6 @@ void applyASMPatches()
         [](Xbyak::CodeGenerator& c, MidHook& hook)
         {
             using namespace Xbyak;
-
             c.db(0x60); // pushad
             c.db(0x9C); // pushfd
 
@@ -137,14 +102,12 @@ void applyASMPatches()
 
             c.mov(c.eax, (uintptr_t)&PushAudioEvent);
             c.call(c.eax);
-
             c.add(c.esp, 4);
 
             c.db(0x9D); // popfd
             c.db(0x61); // popad
 
-            c.mov(c.eax, hook.returnAddress);
-            c.jmp(c.eax);
+            c.jmp((const void*)hook.returnAddress);
         }
     });
 }

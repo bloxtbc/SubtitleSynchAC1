@@ -4,8 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-
-extern bool gamePaused;
+#include <vector>
 
 struct HookTarget {
     uintptr_t dx9;
@@ -19,6 +18,7 @@ struct MidHook
     size_t size;
     uintptr_t returnAddress;
     std::unique_ptr<Xbyak::CodeGenerator> code;
+    std::vector<uint8_t> overwrittenBytes;
 };
 
 struct HookDef
