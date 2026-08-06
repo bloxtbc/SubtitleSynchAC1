@@ -26,9 +26,6 @@ public:
     std::string currentText() const { return m_currentText; }
     std::string debugText() const { return m_debugInput; }
 
-    void updateImGuiInput(bool showDebugWindow, HWND window);
-
-    
 private:
     void advanceSegment();
     
