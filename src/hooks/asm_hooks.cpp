@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <stdexcept>
 
 #include "patcher.h"
 #include "globals.h"
