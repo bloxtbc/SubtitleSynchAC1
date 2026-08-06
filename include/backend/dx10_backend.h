@@ -55,7 +55,12 @@ public:
 
     LRESULT wndProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) override
     {
-        return ImGui_ImplWin32_WndProcHandler(hwnd, msg, w, l);
+        const LRESULT result = ImGui_ImplWin32_WndProcHandler(hwnd, msg, w, l);
+        ImGuiIO& io = ImGui::GetIO();
+        if (result && (io.WantCaptureMouse || io.WantCaptureKeyboard))
+            return TRUE;
+
+        return FALSE;
     }
 
 private:
