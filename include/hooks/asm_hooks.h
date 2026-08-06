@@ -23,7 +23,7 @@ struct MidHook
 
 struct HookDef
 {
-    uintptr_t address;
+    const char* pattern;
     size_t size;
     std::function<void(Xbyak::CodeGenerator&, MidHook&)> builder;
 };

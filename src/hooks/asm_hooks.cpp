@@ -7,6 +7,7 @@
 
 #include "patcher.h"
 #include "globals.h"
+#include "pattern_scan.h"
 
 void PushAudioEvent(uintptr_t evt) {
     g_AudioQueue.push(evt);
@@ -48,7 +49,12 @@ MidHook MakeMidHook(uintptr_t address, size_t overwriteSize, Func&& builder)
 
 MidHook Install(const HookDef& def)
 {
-    return MakeMidHook(def.address, def.size, def.builder);
+    uintptr_t address = PatternScan::Find(def.pattern);
+
+    if (!address)
+        throw std::runtime_error("Failed to find hook pattern");
+
+    return MakeMidHook(address, def.size, def.builder);
 }
 
 MidHook unpauseHook;
@@ -60,7 +66,7 @@ void applyASMPatches()
     //dx9: 0x00C77B69
     //dx10: 0x00E4BB29
     unpauseHook = Install({
-        ResolveAddr(0x00C77B69, 0x00E4BB29),
+        "C6 47 08 01 83 BE 08 01 00 00 00",
         11,
         [](Xbyak::CodeGenerator& c, MidHook& hook)
         {
@@ -75,7 +81,7 @@ void applyASMPatches()
     //dx9: 0x00C774C5
     //dx10: 0x00E4B485
     pauseHook = Install({
-        ResolveAddr(0x00C774C5, 0x00E4B485),
+        "C6 47 08 00 83 BE 08 01 00 00 00",
         11,
         [](Xbyak::CodeGenerator& c, MidHook& hook)
         {
@@ -90,7 +96,7 @@ void applyASMPatches()
     //dx9: 0x007E8555
     //dx10: 0x00C56625
     dareHook = Install({
-        ResolveAddr(0x007E8555, 0x00C56625),
+        "E8 46 C7 FF FF",
         5,
         [](Xbyak::CodeGenerator& c, MidHook& hook)
         {

@@ -24,6 +24,7 @@ add_library(SubtitleSynchAC1 SHARED
     src/hooks/dx9_hook.cpp
     src/hooks/dx10_hook.cpp
     src/ini_config.cpp
+    src/pattern_scan.cpp
 
     external/patcher/patcher.cpp
 )
