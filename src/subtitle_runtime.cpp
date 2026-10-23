@@ -1,10 +1,20 @@
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 
 #include "subtitle_runtime.h"
 
+double applySubtitleTailExtension(double baseDurationSeconds, int extensionMs)
+{
+    const double base = std::isfinite(baseDurationSeconds) && baseDurationSeconds > 0.0
+        ? baseDurationSeconds : 3.0;
+    const int boundedExtension = std::clamp(extensionMs, 0, 10000);
+    return base + static_cast<double>(boundedExtension) / 1000.0;
+}
+
 void SubtitleRuntime::start(
     const std::vector<SubtitleSegment>& segments,
-    clock::duration fallbackDuration)
+    clock::duration fallbackDuration, clock::time_point now)
 {
     m_segments = segments;
     m_index = 0;
@@ -14,55 +24,63 @@ void SubtitleRuntime::start(
     if (!m_active)
         return;
 
+    m_startTime = now;
+    m_endTime = m_startTime + fallbackDuration;
     m_currentText = m_segments[0].text;
 
-    auto now = clock::now();
-
-    double wait = m_segments[0].waitAfter;
-    
-    m_nextSwitch = now + (
+    const double wait = m_segments[0].waitAfter;
+    m_nextSwitch = m_segments.size() == 1 ? m_endTime : now + (
         wait > 0.0
         ? std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(wait))
         : m_fallbackDuration
     );
-
-    m_startTime = clock::now();
-    m_endTime = m_startTime + fallbackDuration;
 }
 
-void SubtitleRuntime::advance(clock::time_point now)
+bool SubtitleRuntime::advance(clock::time_point now)
 {
     if (++m_index >= m_segments.size()) {
         reset();
-        return;
+        return false;
     }
 
     m_currentText = m_segments[m_index].text;
 
-    double wait = m_segments[m_index].waitAfter;
+    const double wait = m_segments[m_index].waitAfter;
 
-    m_nextSwitch = now + (
+    m_nextSwitch = m_index + 1 == m_segments.size() ? m_endTime : now + (
         wait > 0.0
             ? std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(wait))
             : m_fallbackDuration
     );
+    return true;
 }
 
-void SubtitleRuntime::update(clock::time_point now)
+SubtitleUpdateResult SubtitleRuntime::update(clock::time_point now)
 {
+    SubtitleUpdateResult result;
     if (!m_active || m_segments.empty())
-        return;
-
-    if (now < m_nextSwitch)
-        return;
+        return result;
 
     if (now >= m_endTime)
     {
+        result.kind = SubtitleUpdateKind::DurationExpired;
+        result.previousIndex = m_index;
+        result.currentIndex = m_index;
         reset();
-        return;
+        return result;
     }
 
-    advance(now);
+    result.previousIndex = m_index;
+    while (m_active && now >= m_nextSwitch) {
+        if (!advance(m_nextSwitch)) {
+            result.kind = SubtitleUpdateKind::SegmentsExhausted;
+            result.currentIndex = result.previousIndex;
+            return result;
+        }
+        result.kind = SubtitleUpdateKind::SegmentChanged;
+    }
+    result.currentIndex = m_index;
+    return result;
 }
 
 void SubtitleRuntime::reset()

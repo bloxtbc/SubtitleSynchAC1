@@ -1,3 +1,4 @@
 /build
-/build-vs2022-x86
-/build-mingw32
+/build-*
+*.log
+*.capture.tsv

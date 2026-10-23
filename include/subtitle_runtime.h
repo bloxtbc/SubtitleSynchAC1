@@ -6,6 +6,21 @@
 
 #include "subtitle_core.h"
 
+enum class SubtitleUpdateKind {
+    None,
+    SegmentChanged,
+    DurationExpired,
+    SegmentsExhausted,
+};
+
+struct SubtitleUpdateResult {
+    SubtitleUpdateKind kind = SubtitleUpdateKind::None;
+    size_t previousIndex = 0;
+    size_t currentIndex = 0;
+};
+
+double applySubtitleTailExtension(double baseDurationSeconds, int extensionMs);
+
 class SubtitleRuntime {
 public:
     using clock = std::chrono::steady_clock;
@@ -13,17 +28,19 @@ public:
     SubtitleRuntime() = default;
 
     void start(const std::vector<SubtitleSegment>& segments,
-               clock::duration fallbackDuration);
+               clock::duration fallbackDuration, clock::time_point now = clock::now());
 
-    void update(clock::time_point now = clock::now());
+    SubtitleUpdateResult update(clock::time_point now = clock::now());
 
     void reset();
 
     const std::string& currentText() const;
 
     bool active() const;
+    size_t currentIndex() const { return m_index; }
+    size_t segmentCount() const { return m_segments.size(); }
 private:
-    void advance(clock::time_point now);
+    bool advance(clock::time_point now);
 
 private:
     std::vector<SubtitleSegment> m_segments;

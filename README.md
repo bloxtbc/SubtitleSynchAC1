@@ -1,22 +1,39 @@
 # SubtitleSynchAC1
 
-A runtime subtitle overlay tool that displays real-time subtitles by tracking in-game audio events and mapping them to a local subtitle database.
+A subtitle overlay for Assassin's Creed (2008). It watches the voice lines the
+game plays and shows the matching text from a local subtitle database in an
+ImGui overlay.
 
-This project uses a memory hook to detect currently playing audio cues and renders corresponding subtitles through an ImGui-based overlay.
+This is a fork of [bloxtbc/SubtitleSynchAC1](https://github.com/bloxtbc/SubtitleSynchAC1).
+See [CHANGELOG.md](CHANGELOG.md) for the changes compared with the original.
 
+## Install
 
-## Features
+1. Install an ASI loader (for example Ultimate ASI Loader as `dinput8.dll`) in the game folder.
+2. Copy these files into the game's `scripts` folder:
+   - `SubtitleSynchAC1.asi` (built from this repository)
+   - `assets/subtitles.json`, `assets/subtitles_secondary.json`, `assets/subtitles.ttf`
+   - `assets/SubtitleSynchAC1.ini`
+3. Start the game. F1 opens the settings window.
 
-- Real-time audio event tracking from the game process
-- JSON-based subtitle mapping system
-- Lightweight ImGui overlay for rendering subtitles
-- Supports custom localization packs
+`subtitles_secondary.json` is optional. It holds ambient speech (citizens,
+guards, preachers), which is shown in a dimmer colour and never replaces story
+dialogue.
 
----
+## Build
 
-## How It Works
+The mod must be built as a 32-bit Windows DLL.
 
-1. The tool hooks into the game process at runtime
-2. It monitors currently playing sound events / sound IDs
-3. Each sound ID is matched against a local `subtitles.json` database
-4. If a match is found, the corresponding subtitle text is rendered in an ImGui overlay
+```
+git clone --recurse-submodules https://github.com/markf11/SubtitleSynchAC1.git
+cmake -S SubtitleSynchAC1 -B build -A Win32
+cmake --build build --config Release
+ctest --test-dir build -C Release
+```
+
+With LLVM-MinGW, set `LLVM_MINGW_ROOT` and pass
+`-G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/llvm-mingw-x86.cmake` instead of `-A Win32`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

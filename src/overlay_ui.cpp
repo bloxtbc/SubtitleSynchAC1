@@ -1,13 +1,16 @@
 #include <imgui.h>
+#include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <misc/cpp/imgui_stdlib.h>
-#include <array>
 
 #include "overlay_ui.h"
 #include "reshaper/arabic.h"
 #include "ini_config.h"
 #include "subtitle_settings.h"
+#include "subtitle_layout.h"
 #include "globals.h"
+#include "diagnostics.h"
 
 SubtitleSettings g_subtitleSettings;
 
@@ -135,63 +138,84 @@ void SubtitleOverlay::advanceSegment()
     }
 }
 
+void SubtitleOverlay::showCaptureMarker(uint32_t sequence)
+{
+    m_captureMarkerSequence = sequence;
+    m_captureMarkerUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(1200);
+}
+
+void SubtitleOverlay::drawCaptureMarker()
+{
+    const auto now = std::chrono::steady_clock::now();
+    if (!m_captureMarkerSequence || now >= m_captureMarkerUntil)
+        return;
+
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    if (display.x <= 0.0f || display.y <= 0.0f)
+        return;
+
+    const float remaining = std::chrono::duration<float>(m_captureMarkerUntil - now).count();
+    const float fade = std::clamp(remaining / 0.30f, 0.0f, 1.0f);
+    const float markerFontSize = std::clamp(18.0f * display.y / 1080.0f, 14.0f, 24.0f);
+    char label[32]{};
+    std::snprintf(label, sizeof(label), "F2 MARK #%03lu",
+        static_cast<unsigned long>(m_captureMarkerSequence));
+
+    ImGui::PushFont(g_subtitleSettings.font, markerFontSize);
+    const ImVec2 textSize = ImGui::CalcTextSize(label);
+    const ImVec2 padding(10.0f, 5.0f);
+    ImGui::SetNextWindowPos(
+        ImVec2((display.x - textSize.x - padding.x * 2.0f) * 0.5f, 16.0f),
+        ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.58f * fade);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.25f, 0.95f, 0.45f, 0.85f * fade));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 1.0f, 0.68f, fade));
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus;
+    if (ImGui::Begin("CaptureMarkerIndicator", nullptr, flags))
+        ImGui::TextUnformatted(label);
+    ImGui::End();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(3);
+    ImGui::PopFont();
+}
+
 
 void SubtitleOverlay::drawDebugWindow() {
-    ImGui::SetNextWindowSize(ImVec2(300, 550));
+    ImGui::SetNextWindowSize(ImVec2(450, 0), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(0, 0));
 
-    ImGui::Begin("SubtitleSynchAC1 by bloxtbc", &m_debugWindow, ImGuiWindowFlags_None);
+    ImGui::Begin("SubtitleSynchAC1 by bloxtbc", &m_debugWindow, ImGuiWindowFlags_AlwaysAutoResize);
 
+    ImGui::TextWrapped("SubtitleSynchAC1 was created by bloxtbc.");
+    ImGui::TextWrapped("Co-authors: Hadrorex, Zull11");
     ImGui::Separator();
 
-    ImGui::TextWrapped("This mod was developed and created by bloxtbc on NexusMods, support me and report any bugs if there are any on the NexusMods page for SubtitleSynchAC1.");
-
-    ImGui::Checkbox("Show subtitle", &m_debugVisible);
-    ImGui::Checkbox("Auto position", &g_subtitleSettings.autoPosition);
-
-    ImGui::ColorEdit4("Text Color", (float*)&g_subtitleSettings.textColor);
-    ImGui::ColorEdit4("Background Color", (float*)&g_subtitleSettings.backgroundColor);
-
-    ImGui::Text("Loaded font: %s", g_subtitleSettings.font ? "yes" : "no");
-
-    ImGuiIO& io = ImGui::GetIO();
-    ImGui::Text("Mouse: %.1f %.1f", io.MousePos.x, io.MousePos.y);
-
-    ImGui::DragFloat2("Padding", (float*)&g_subtitleSettings.padding, 0.1f, -10.0f, 10.0f);
-    ImVec2 screenSize = io.DisplaySize;
-    if (g_subtitleSettings.autoPosition) {
-        g_subtitleSettings.position = ImVec2(screenSize.x / 2.0f, screenSize.y - 100.0f);
-    }
-    else {
-        ImGui::DragFloat2("Subtitle position", (float*)&g_subtitleSettings.position, 1.0f, 0.0f, screenSize.x);
-    }
-
-    ImGui::SliderFloat("Font Scale", &g_subtitleSettings.scale, 0.5f, 3.0f);
-
-    if (ImGui::Button("Reset to defaults"))
-    {
-        ImVec2 screenSize = io.DisplaySize;
-        g_subtitleSettings.autoPosition = true;
-        g_subtitleSettings.position = ImVec2(screenSize.x / 2.0f, screenSize.y - 100.0f);
-        g_subtitleSettings.padding = ImVec2(8, -25);
-        g_subtitleSettings.textColor = ImVec4(1, 1, 1, 1);
-        g_subtitleSettings.backgroundColor = ImVec4(0, 0, 0, 0.5f);
-        g_subtitleSettings.scale = 1.0f;
-    }
+    ImGui::Checkbox("Show subtitles", &g_subtitleSettings.showSubtitles);
+    ImGui::SliderFloat("Subtitle scale", &g_subtitleSettings.scale, 0.5f, 3.0f);
+    ImGui::Checkbox("Show sound descriptions ([laughs], [groans])", &g_subtitleSettings.showSoundCaptions);
 
     ImGui::Separator();
-
+    ImGui::TextWrapped("Preview text (shown while this window is open):");
     ImGui::InputTextMultiline(
-        "##debug_output",
+        "##preview_text",
         &m_debugInput,
-        ImVec2(-1.0f, ImGui::GetTextLineHeight() * 8),
+        ImVec2(420.0f, ImGui::GetTextLineHeight() * 4),
         ImGuiInputTextFlags_AllowTabInput
     );
 
+    static bool saveFailed = false;
     if (ImGui::Button("Save to .ini"))
-       m_config.save();
+        saveFailed = !m_config.save();
+    if (saveFailed)
+        ImGui::TextWrapped("Cannot write SubtitleSynchAC1.ini in the mod folder.");
 
-    ImGui::TextWrapped("F1 toggles this debug window.");
+    ImGui::TextWrapped("F1 opens and closes this window.");
 
     ImGui::End();
 }
@@ -207,78 +231,71 @@ void SubtitleOverlay::render(HWND window)
     if (m_debugWindow)
         drawDebugWindow();
 
+    drawCaptureMarker();
+
     if (!m_visible || m_currentText.empty())
+    {
+        m_layoutLogged = false;
         return;
+    }
 
     std::wstring reshapedW = ShapingEngine::wrender(ShapingEngine::Helper::widen(m_currentText));
     std::string reshaped = ShapingEngine::Helper::narrow(reshapedW);
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, g_subtitleSettings.backgroundColor);
+    // Win32 refreshes DisplaySize from the game's client area every frame,
+    // including fullscreen resolution changes. Never use desktop dimensions.
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    if (display.x <= 0 || display.y <= 0) return;
+    ImGui::PushFont(g_subtitleSettings.font, subtitleFontSize(g_subtitleSettings, display));
+    const float saveLift = (m_saveIndicatorActive || m_pressPromptActive)
+        ? g_subtitleSettings.saveIndicatorLift : 0.0f;
+    const auto layout = measureSubtitle(g_subtitleSettings, display, reshaped.c_str(), saveLift);
+    const unsigned liftSources = (m_saveIndicatorActive ? 1u : 0u) | (m_pressPromptActive ? 2u : 0u);
+    if (Diagnostics::enabled()) {
+        if (!m_layoutLogged || layout.position.x != m_lastLayoutX || layout.position.y != m_lastLayoutY ||
+            layout.size.x != m_lastLayoutWidth || layout.size.y != m_lastLayoutHeight ||
+            liftSources != m_lastLayoutLiftSources) {
+            Diagnostics::log("subtitle_layout x=%.1f y=%.1f width=%.1f height=%.1f lines=%zu lift=%.1f save=%u interaction=%u screen=%.0fx%.0f",
+                layout.position.x, layout.position.y, layout.size.x, layout.size.y, layout.lines.size(),
+                saveLift, m_saveIndicatorActive, m_pressPromptActive, display.x, display.y);
+            m_lastLayoutX = layout.position.x; m_lastLayoutY = layout.position.y;
+            m_lastLayoutWidth = layout.size.x; m_lastLayoutHeight = layout.size.y;
+            m_lastLayoutLiftSources = liftSources;
+            m_layoutLogged = true;
+        }
+    } else m_layoutLogged = false;
+
+    ImGui::PushStyleColor(ImGuiCol_Text, m_secondary ? g_subtitleSettings.secondaryTextColor : g_subtitleSettings.textColor);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1, 1));
+    ImGui::SetNextWindowPos(layout.position, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(layout.size, ImGuiCond_Always);
 
-    float fontSize = g_subtitleSettings.fontSize * g_subtitleSettings.scale;
-
-    if (g_subtitleSettings.font) {
-        ImGui::PushFont(g_subtitleSettings.font);
-        ImGui::PushFont(NULL, fontSize);
-    }
-
-    ImVec2 textSize = ImGui::CalcTextSize(reshaped.c_str());
-
-    if (g_subtitleSettings.font) {
-        ImGui::PopFont();
-        ImGui::PopFont();
-    }
-
-    ImVec2 totalSize = {
-        textSize.x + g_subtitleSettings.padding.x,
-        textSize.y + g_subtitleSettings.padding.y
-    };
-
-    ImVec2 pos = {
-        g_subtitleSettings.position.x - totalSize.x * 0.5f,
-        g_subtitleSettings.position.y - totalSize.y * 0.5f
-    };
-
-    ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-    ImGui::SetNextWindowSize(totalSize, ImGuiCond_Always);
-
-    ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings;
-
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoBackground;
     if (ImGui::Begin("SubtitleOverlay", nullptr, flags))
     {
-        ImGui::PushStyleColor(ImGuiCol_Text, g_subtitleSettings.textColor);
-
-        float fontSize = g_subtitleSettings.fontSize * g_subtitleSettings.scale;
-
-        if (g_subtitleSettings.font)
-        {
-            ImGui::PushFont(g_subtitleSettings.font);
-            ImGui::PushFont(NULL,fontSize);
+        const ImVec2 origin = ImGui::GetWindowPos();
+        const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+        const ImU32 backgroundColor = ImGui::ColorConvertFloat4ToU32(g_subtitleSettings.backgroundColor);
+        for (const auto& line : layout.lines) {
+            if (line.text.empty()) continue;
+            const ImVec2 start(origin.x + line.backgroundOffset.x,
+                               origin.y + line.backgroundOffset.y);
+            const ImVec2 finish(start.x + line.backgroundSize.x,
+                                start.y + line.backgroundSize.y);
+            ImGui::GetWindowDrawList()->AddRectFilled(start, finish, backgroundColor, 4.0f);
         }
-
-        ImGui::SetCursorPosX((ImGui::GetWindowSize().x - textSize.x) * 0.5f);
-        ImGui::SetCursorPosY((ImGui::GetWindowSize().y - textSize.y) * 0.5f);
-
-        ImGui::TextUnformatted(reshaped.c_str());
-
-        if (g_subtitleSettings.font)
-        {
-            ImGui::PopFont();
-            ImGui::PopFont();
-        }
-
-        ImGui::PopStyleColor();
+        for (const auto& line : layout.lines)
+            ImGui::GetWindowDrawList()->AddText(
+                ImVec2(origin.x + line.offset.x, origin.y + line.offset.y), color, line.text.c_str());
     }
-
     ImGui::End();
-
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(4);
     ImGui::PopStyleColor();
+    ImGui::PopFont();
 }

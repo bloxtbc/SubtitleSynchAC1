@@ -1,121 +1,31 @@
 #include "pattern_scan.h"
-
+#include "diagnostics.h"
 #include <Windows.h>
-#include <vector>
-#include <optional>
-#include <stdexcept>
+#include <algorithm>
 
-namespace
-{
-    struct PatternByte
-    {
-        uint8_t value;
-        bool wildcard;
-    };
-
-    int HexToInt(char c)
-    {
-        if (c >= '0' && c <= '9')
-            return c - '0';
-
-        if (c >= 'A' && c <= 'F')
-            return c - 'A' + 10;
-
-        if (c >= 'a' && c <= 'f')
-            return c - 'a' + 10;
-
-        return -1;
-    }
-
-    std::vector<PatternByte> ParsePattern(std::string_view pattern)
-    {
-        std::vector<PatternByte> bytes;
-
-        size_t i = 0;
-
-        while (i < pattern.size())
-        {
-            if (pattern[i] == ' ')
-            {
-                ++i;
-                continue;
-            }
-
-            if (pattern[i] == '?')
-            {
-                bytes.push_back({0, true});
-
-                ++i;
-
-                if (i < pattern.size() && pattern[i] == '?')
-                    ++i;
-
-                continue;
-            }
-
-            if (i + 1 >= pattern.size())
-                throw std::runtime_error("Invalid pattern.");
-
-            int hi = HexToInt(pattern[i]);
-            int lo = HexToInt(pattern[i + 1]);
-
-            if (hi < 0 || lo < 0)
-                throw std::runtime_error("Invalid hex digit.");
-
-            bytes.push_back({
-                static_cast<uint8_t>((hi << 4) | lo),
-                false
-            });
-
-            i += 2;
+uintptr_t PatternScan::Find(void* module, std::string_view pattern) {
+    if (!module) return 0;
+    auto* image = static_cast<uint8_t*>(module);
+    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(image);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(image + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
+    auto* section = IMAGE_FIRST_SECTION(nt);
+    size_t count = 0;
+    uintptr_t candidate = 0;
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        const auto& s = section[i];
+        if (!(s.Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        if (s.VirtualAddress >= nt->OptionalHeader.SizeOfImage) continue;
+        const size_t size = std::min(s.Misc.VirtualSize, nt->OptionalHeader.SizeOfImage - s.VirtualAddress);
+        for (auto offset : FindOffsets(image + s.VirtualAddress, size, pattern)) {
+            candidate = reinterpret_cast<uintptr_t>(image + s.VirtualAddress + offset);
+            ++count;
+            Diagnostics::log("hook_candidate address=%p rva=%08lx", reinterpret_cast<void*>(candidate),
+                static_cast<unsigned long>(s.VirtualAddress + offset));
         }
-
-        return bytes;
     }
+    Diagnostics::log("hook_scan matches=%zu", count);
+    return count == 1 ? candidate : 0;
 }
-
-namespace PatternScan
-{
-    uintptr_t Find(void* module, std::string_view pattern)
-    {
-        if (!module)
-            return 0;
-
-        auto parsed = ParsePattern(pattern);
-
-        auto* dos = reinterpret_cast<PIMAGE_DOS_HEADER>(module);
-        auto* nt =
-            reinterpret_cast<PIMAGE_NT_HEADERS>(
-                reinterpret_cast<uint8_t*>(module) + dos->e_lfanew);
-
-        auto* image = reinterpret_cast<uint8_t*>(module);
-        size_t imageSize = nt->OptionalHeader.SizeOfImage;
-
-        for (size_t i = 0; i <= imageSize - parsed.size(); ++i)
-        {
-            bool match = true;
-
-            for (size_t j = 0; j < parsed.size(); ++j)
-            {
-                if (!parsed[j].wildcard &&
-                    image[i + j] != parsed[j].value)
-                {
-                    match = false;
-                    break;
-                }
-            }
-
-            if (match)
-                return reinterpret_cast<uintptr_t>(image + i);
-        }
-
-        return 0;
-    }
-
-    uintptr_t Find(std::string_view pattern)
-    {
-        uintptr_t found = Find(GetModuleHandle(nullptr), pattern);
-        printf("[PatternScan] Pattern '%s' found at 0x%p\n", pattern.data(), (void*)found);
-        return found;
-    }
-}
+uintptr_t PatternScan::Find(std::string_view pattern) { return Find(GetModuleHandleA(nullptr), pattern); }

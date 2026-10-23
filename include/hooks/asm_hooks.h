@@ -1,32 +1,15 @@
 #pragma once
-
-#include <xbyak/xbyak.h>
 #include <cstdint>
-#include <functional>
-#include <memory>
-#include <vector>
-
-struct HookTarget {
-    uintptr_t dx9;
-    uintptr_t dx10;
-    size_t size;
-};
-
-struct MidHook
-{
-    uintptr_t address;
-    size_t size;
-    uintptr_t returnAddress;
-    std::unique_ptr<Xbyak::CodeGenerator> code;
-    std::vector<uint8_t> overwrittenBytes;
-};
-
-struct HookDef
-{
-    const char* pattern;
-    size_t size;
-    std::function<void(Xbyak::CodeGenerator&, MidHook&)> builder;
-};
-
-template <typename Func> MidHook MakeMidHook(uintptr_t address, size_t overwriteSize, Func&& builder);
-void applyASMPatches(void);
+#include "audio_resolver.h"
+bool applyASMPatches();
+namespace AudioHook {
+bool Install(uintptr_t address);
+// address: the instruction right after the leaf play CALL; micHeadSlot: the
+// engine's microphone list head (0 = distance unknown).
+bool InstallLeaf(uintptr_t address, uintptr_t micHeadSlot);
+bool leafActive();
+// Current listener distance and level of a playing voice instance (from the
+// leaf hook). Safe on any thread: reads go through ReadProcessMemory.
+VoiceLevel readVoiceLevelNow(uintptr_t instance);
+}
+namespace PauseHook { bool Install(uintptr_t address, unsigned playing); bool InstallGameHooks(); }
